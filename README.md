@@ -1,5 +1,7 @@
 # Next Move
 
+[![CI](https://github.com/Armandinoa/next-move/actions/workflows/ci.yml/badge.svg)](https://github.com/Armandinoa/next-move/actions/workflows/ci.yml)
+
 Turn a messy project into the next useful actions.
 
 Next Move is a small CLI that scans a repository and generates a practical
@@ -81,8 +83,10 @@ modify code automatically.
 ## Example
 
 ```bash
-python next_move.py --repo ../files-mentioned-by-the-user-www --output ROADMAP.md
+python next_move.py --repo examples/demo-project --output examples/demo-report.md
 ```
+
+See the generated [demo report](examples/demo-report.md).
 
 ## Monetization paths for this repo
 

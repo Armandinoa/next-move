@@ -26,6 +26,7 @@ IGNORE_DIRS = {
     ".pytest_cache",
     ".mypy_cache",
 }
+TOP_LEVEL_IGNORE_DIRS = {"examples"}
 
 CODE_EXTENSIONS = {
     ".py",
@@ -122,6 +123,9 @@ def iter_files(root: Path) -> Iterable[Path]:
         for file_name in files:
             path = current_path / file_name
             if any(part in IGNORE_DIRS for part in path.parts):
+                continue
+            relative_parts = path.relative_to(root).parts
+            if relative_parts and relative_parts[0] in TOP_LEVEL_IGNORE_DIRS:
                 continue
             if path.name.lower() in GENERATED_REPORT_NAMES | SELF_IMPROVE_REPORT_NAMES:
                 continue
