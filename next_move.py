@@ -44,6 +44,7 @@ TEST_HINTS = ("test_", "_test.", ".spec.", ".test.", "tests")
 DOC_NAMES = {"readme.md", "docs", "documentation"}
 CI_DIRS = {".github", ".gitlab-ci.yml", "azure-pipelines.yml"}
 GENERATED_REPORT_NAMES = {"roadmap.md", "next_moves.md", "sample_roadmap.md"}
+SELF_IMPROVE_REPORT_NAMES = {"next_action.md", "self_improve.md"}
 ENV_MARKERS = (
     "os." + "environ",
     "get" + "env(",
@@ -96,7 +97,7 @@ def iter_files(root: Path) -> Iterable[Path]:
             path = current_path / file_name
             if any(part in IGNORE_DIRS for part in path.parts):
                 continue
-            if path.name.lower() in GENERATED_REPORT_NAMES:
+            if path.name.lower() in GENERATED_REPORT_NAMES | SELF_IMPROVE_REPORT_NAMES:
                 continue
             yield path
 
@@ -388,6 +389,80 @@ def write_issue_files(findings: list[Finding], issues_dir: Path, limit: int = 8)
     return written
 
 
+def render_self_improve(profile: RepoProfile, findings: list[Finding]) -> str:
+    if not findings:
+        return "\n".join(
+            [
+                "# Next Action",
+                "",
+                f"Generated: {profile.scanned_at}",
+                f"Repo: `{profile.root}`",
+                "",
+                "No obvious next move was detected. Review the project manually or add a project-specific playbook.",
+                "",
+            ]
+        )
+
+    top = findings[0]
+    branch_name = f"next/{slugify(top.title)}"
+    issue = github_issue_drafts([top], limit=1)[0]
+    roadmap_command = "python next_move.py --repo . --output ROADMAP.md --issues-dir issues-drafts"
+
+    lines = [
+        "# Next Action",
+        "",
+        f"Generated: {profile.scanned_at}",
+        f"Repo: `{profile.root}`",
+        "",
+        "## Recommended Move",
+        "",
+        f"### {top.title}",
+        "",
+        f"- Category: `{top.category}`",
+        f"- Impact: {top.impact}/5",
+        f"- Effort: {top.effort}/5",
+        f"- Priority score: {top.priority}",
+        f"- Why: {top.why}",
+        f"- Action: {top.action}",
+        "",
+        "## Suggested Branch",
+        "",
+        f"`{branch_name}`",
+        "",
+        "## Implementation Checklist",
+        "",
+        "- Create or switch to the suggested branch.",
+        "- Implement only this move; keep unrelated ideas for later.",
+        "- Run the local smoke test.",
+        "- Regenerate the roadmap and compare what changed.",
+        "- Commit with a short message that names the move.",
+        "",
+        "## Commands",
+        "",
+        "```bash",
+        f"git checkout -b {branch_name}",
+        roadmap_command,
+        "python -m py_compile next_move.py",
+        "python next_move.py --repo . --json",
+        "```",
+        "",
+        "## GitHub Issue Draft",
+        "",
+        f"Title: {issue['title']}",
+        f"Labels: `{issue['labels']}`",
+        "",
+        issue["body"],
+        "",
+        "## Stop Conditions",
+        "",
+        "- Do not auto-edit files without human review.",
+        "- Stop if the suggested move is vague, low-value, or already done.",
+        "- Prefer one finished improvement over multiple half-started ideas.",
+        "",
+    ]
+    return "\n".join(lines)
+
+
 def render_markdown(profile: RepoProfile, findings: list[Finding]) -> str:
     issue_drafts = github_issue_drafts(findings)
     lines = [
@@ -460,7 +535,14 @@ def render_markdown(profile: RepoProfile, findings: list[Finding]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def run(repo: Path, output: Path | None, as_json: bool, issues_dir: Path | None) -> int:
+def run(
+    repo: Path,
+    output: Path | None,
+    as_json: bool,
+    issues_dir: Path | None,
+    self_improve: bool,
+    self_improve_output: Path | None,
+) -> int:
     root = repo.resolve()
     if not root.exists() or not root.is_dir():
         raise SystemExit(f"Repo path does not exist or is not a directory: {root}")
@@ -475,6 +557,12 @@ def run(repo: Path, output: Path | None, as_json: bool, issues_dir: Path | None)
 
     if as_json:
         print(json.dumps(payload, indent=2))
+        return 0
+
+    if self_improve:
+        target = self_improve_output or root / "NEXT_ACTION.md"
+        target.write_text(render_self_improve(profile, findings), encoding="utf-8")
+        print(f"Wrote {target}")
         return 0
 
     markdown = render_markdown(profile, findings)
@@ -492,6 +580,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--repo", default=".", help="Repository or project directory to scan.")
     parser.add_argument("--output", help="Markdown output path. Defaults to ROADMAP.md inside the repo.")
     parser.add_argument("--issues-dir", help="Write GitHub issue draft Markdown files to this directory.")
+    parser.add_argument("--self-improve", action="store_true", help="Write a guided next-action plan for this repo.")
+    parser.add_argument(
+        "--self-improve-output",
+        help="Markdown output path for --self-improve. Defaults to NEXT_ACTION.md inside the repo.",
+    )
     parser.add_argument("--json", action="store_true", help="Print JSON instead of writing Markdown.")
     return parser.parse_args()
 
@@ -500,7 +593,8 @@ def main() -> int:
     args = parse_args()
     output = Path(args.output).resolve() if args.output else None
     issues_dir = Path(args.issues_dir).resolve() if args.issues_dir else None
-    return run(Path(args.repo), output, args.json, issues_dir)
+    self_improve_output = Path(args.self_improve_output).resolve() if args.self_improve_output else None
+    return run(Path(args.repo), output, args.json, issues_dir, args.self_improve, self_improve_output)
 
 
 if __name__ == "__main__":

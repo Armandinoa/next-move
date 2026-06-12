@@ -62,6 +62,16 @@ Generate GitHub issue drafts:
 python next_move.py --repo path/to/project --issues-dir issues-drafts
 ```
 
+Generate a guided self-improvement plan:
+
+```bash
+python next_move.py --repo . --self-improve
+```
+
+This writes `NEXT_ACTION.md` with the highest-priority move, a suggested branch,
+implementation checklist, smoke-test commands, and stop conditions. It does not
+modify code automatically.
+
 ## Example
 
 ```bash
