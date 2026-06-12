@@ -187,7 +187,7 @@ def build_profile(root: Path) -> RepoProfile:
         or any(name in names for name in CI_DIRS),
         has_docker="dockerfile" in names or "docker-compose.yml" in names,
         has_web_ui=any(part in rel for rel in rels for part in ("src/main", "app/", "pages/", "dashboard")),
-        has_cli=any(path.name in {"cli.py", "__main__.py", "main.py"} for path in files),
+        has_cli=any(path.name in {"cli.py", "__main__.py", "main.py", "next_move.py"} for path in files),
         uses_env=uses_env,
         todo_count=todo_count,
         large_files=large_files[:12],
