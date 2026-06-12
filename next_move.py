@@ -109,6 +109,7 @@ class RepoProfile:
     has_web_ui: bool
     has_cli: bool
     has_demo: bool
+    has_paid_boundary: bool
     uses_env: bool
     todo_count: int
     large_files: list[str]
@@ -218,6 +219,10 @@ def build_profile(root: Path) -> RepoProfile:
         has_web_ui=any(part in rel for rel in rels for part in ("src/main", "app/", "pages/", "dashboard")),
         has_cli=any(path.name in {"cli.py", "__main__.py", "main.py", "next_move.py"} for path in files),
         has_demo=has_demo,
+        has_paid_boundary=any(
+            rel in {"docs/monetization.md", "monetization.md", "pricing.md", "docs/pricing.md"}
+            for rel in rels
+        ),
         uses_env=uses_env,
         todo_count=todo_count,
         large_files=large_files[:12],
@@ -339,15 +344,16 @@ def generate_findings(profile: RepoProfile) -> list[Finding]:
             "maintenance",
         )
 
-    add(
-        findings,
-        "Define the next paid boundary",
-        "Open source projects monetize better when the free and paid value are intentionally separated.",
-        "Keep the core scanner free. Make scheduling, hosted dashboards, team history, and integrations paid.",
-        5,
-        2,
-        "monetization",
-    )
+    if not profile.has_paid_boundary:
+        add(
+            findings,
+            "Define the next paid boundary",
+            "Open source projects monetize better when the free and paid value are intentionally separated.",
+            "Keep the core scanner free. Make scheduling, hosted dashboards, team history, and integrations paid.",
+            5,
+            2,
+            "monetization",
+        )
     if not profile.has_demo:
         add(
             findings,
@@ -520,6 +526,7 @@ def render_markdown(profile: RepoProfile, findings: list[Finding]) -> str:
         f"- CI: {'yes' if profile.has_ci else 'no'}",
         f"- Docker: {'yes' if profile.has_docker else 'no'}",
         f"- Demo: {'yes' if profile.has_demo else 'no'}",
+        f"- Paid boundary: {'yes' if profile.has_paid_boundary else 'no'}",
         "",
         "## Recommended Next Moves",
         "",

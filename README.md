@@ -94,6 +94,9 @@ This project can stay open source while making money through:
 - Premium templates for product, trading bots, SaaS, mobile apps, and AI tools.
 - Setup services for founders who want this connected to Telegram, Discord, or GitHub Issues.
 
+The free/paid boundary is documented in
+[docs/MONETIZATION.md](docs/MONETIZATION.md).
+
 ## Current scope
 
 This first version is heuristic, not magic. It does not read private secrets,
