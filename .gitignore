@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.env
+.venv/
+ROADMAP.md
+NEXT_MOVES.md
+SAMPLE_ROADMAP.md
+issues-drafts/
