@@ -70,6 +70,12 @@ Generate GitHub issue drafts:
 python next_move.py --repo path/to/project --issues-dir issues-drafts
 ```
 
+Exclude vendored or generated folders:
+
+```bash
+python next_move.py --repo path/to/project --exclude vendor --exclude examples
+```
+
 Generate a guided self-improvement plan:
 
 ```bash

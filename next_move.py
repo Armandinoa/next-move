@@ -116,15 +116,18 @@ class RepoProfile:
     large_files: list[str]
 
 
-def iter_files(root: Path) -> Iterable[Path]:
+def iter_files(root: Path, exclude: set[str] | None = None) -> Iterable[Path]:
+    exclude = exclude or set()
     for current, dirs, files in os.walk(root):
-        dirs[:] = [item for item in dirs if item not in IGNORE_DIRS]
+        dirs[:] = [item for item in dirs if item not in IGNORE_DIRS and item not in exclude]
         current_path = Path(current)
         for file_name in files:
             path = current_path / file_name
             if any(part in IGNORE_DIRS for part in path.parts):
                 continue
             relative_parts = path.relative_to(root).parts
+            if any(part in exclude for part in relative_parts):
+                continue
             if relative_parts and relative_parts[0] in TOP_LEVEL_IGNORE_DIRS:
                 continue
             if path.name.lower() in GENERATED_REPORT_NAMES | SELF_IMPROVE_REPORT_NAMES:
@@ -176,8 +179,8 @@ def detect_stacks(files: list[Path]) -> list[str]:
     return stacks or ["Unknown"]
 
 
-def build_profile(root: Path) -> RepoProfile:
-    files = list(iter_files(root))
+def build_profile(root: Path, exclude: set[str] | None = None) -> RepoProfile:
+    files = list(iter_files(root, exclude=exclude))
     names = {path.name.lower() for path in files}
     rels = [path.relative_to(root).as_posix().lower() for path in files]
     code_files = [path for path in files if path.suffix.lower() in CODE_EXTENSIONS]
@@ -591,10 +594,11 @@ def run_report(
     issues_dir: Path | None,
     self_improve: bool,
     self_improve_output: Path | None,
+    exclude: set[str] | None = None,
     default_output: Path | None = None,
     print_markdown: bool = False,
 ) -> int:
-    profile = build_profile(root)
+    profile = build_profile(root, exclude=exclude)
     findings = generate_findings(profile)
     payload = {
         "profile": asdict(profile),
@@ -634,6 +638,7 @@ def run(
     self_improve: bool,
     self_improve_output: Path | None,
     demo: bool,
+    exclude: set[str] | None,
 ) -> int:
     if demo:
         with tempfile.TemporaryDirectory(prefix="next-move-demo-") as tmp:
@@ -646,19 +651,35 @@ def run(
                 issues_dir,
                 self_improve,
                 self_improve_output,
+                exclude=None,
                 print_markdown=output is None and not as_json and not self_improve,
             )
 
     root = repo.resolve()
     if not root.exists() or not root.is_dir():
         raise SystemExit(f"Repo path does not exist or is not a directory: {root}")
-    return run_report(root, output, as_json, issues_dir, self_improve, self_improve_output, default_output=root / "ROADMAP.md")
+    return run_report(
+        root,
+        output,
+        as_json,
+        issues_dir,
+        self_improve,
+        self_improve_output,
+        exclude=exclude,
+        default_output=root / "ROADMAP.md",
+    )
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate practical next moves for a repository.")
     parser.add_argument("--demo", action="store_true", help="Run against a built-in demo project and print the report.")
     parser.add_argument("--repo", default=".", help="Repository or project directory to scan.")
+    parser.add_argument(
+        "--exclude",
+        action="append",
+        default=[],
+        help="Top-level folder or path part to exclude from scanning. Can be used multiple times.",
+    )
     parser.add_argument("--output", help="Markdown output path. Defaults to ROADMAP.md inside the repo.")
     parser.add_argument("--issues-dir", help="Write GitHub issue draft Markdown files to this directory.")
     parser.add_argument("--self-improve", action="store_true", help="Write a guided next-action plan for this repo.")
@@ -675,7 +696,16 @@ def main() -> int:
     output = Path(args.output).resolve() if args.output else None
     issues_dir = Path(args.issues_dir).resolve() if args.issues_dir else None
     self_improve_output = Path(args.self_improve_output).resolve() if args.self_improve_output else None
-    return run(Path(args.repo), output, args.json, issues_dir, args.self_improve, self_improve_output, args.demo)
+    return run(
+        Path(args.repo),
+        output,
+        args.json,
+        issues_dir,
+        args.self_improve,
+        self_improve_output,
+        args.demo,
+        set(args.exclude),
+    )
 
 
 if __name__ == "__main__":
