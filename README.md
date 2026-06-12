@@ -97,6 +97,14 @@ This project can stay open source while making money through:
 The free/paid boundary is documented in
 [docs/MONETIZATION.md](docs/MONETIZATION.md).
 
+## Support the project
+
+If Next Move helps you turn a stuck project into clear next actions, you can
+support development through GitHub Sponsors.
+
+Commercial support is also available for setup, automation, and team pilots.
+See [docs/COMMERCIAL.md](docs/COMMERCIAL.md).
+
 ## Current scope
 
 This first version is heuristic, not magic. It does not read private secrets,

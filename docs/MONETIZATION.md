@@ -32,6 +32,9 @@ Potential paid layers can build on top of the free CLI:
 - Private LLM review with user-provided keys or managed credits.
 - Done-for-you setup for founders or teams.
 
+Commercial support packages are described in
+[COMMERCIAL.md](COMMERCIAL.md).
+
 ## What Not To Monetize
 
 Avoid charging for the basics that make the project worth trying:
@@ -64,4 +67,3 @@ Free should answer:
 Paid should answer:
 
 > Keep watching all my projects and tell my team what changed.
-
