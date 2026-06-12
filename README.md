@@ -33,6 +33,12 @@ Next Move gives structure to that decision.
 
 ## Usage
 
+Try it immediately:
+
+```bash
+python next_move.py --demo
+```
+
 ```bash
 python next_move.py --repo path/to/project
 ```

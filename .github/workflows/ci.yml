@@ -25,5 +25,8 @@ jobs:
       - name: Run JSON smoke test
         run: python next_move.py --repo . --json
 
+      - name: Run demo smoke test
+        run: python next_move.py --demo
+
       - name: Run self-improve smoke test
         run: python next_move.py --repo . --self-improve --self-improve-output /tmp/NEXT_ACTION.md

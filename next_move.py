@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import tempfile
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -53,6 +54,29 @@ ENV_MARKERS = (
     "pydantic_" + "settings",
 )
 
+DEMO_PROJECT_FILES = {
+    "README.md": "# Demo App\n\nA tiny unfinished app used to demonstrate Next Move.\n",
+    "app.py": (
+        "import os\n\n"
+        "API_KEY = os." + "environ.get('DEMO_API_KEY')\n\n"
+        "def main():\n"
+        "    # TODO: add input validation before shipping\n"
+        "    print('demo app')\n"
+    ),
+    "cli.py": (
+        "def run():\n"
+        "    print('demo cli')\n"
+    ),
+    "dashboard.py": (
+        "def render_dashboard():\n"
+        "    return '<h1>Demo</h1>'\n"
+    ),
+    "worker.py": (
+        "def process_jobs(jobs):\n"
+        "    return [job for job in jobs]\n"
+    ),
+}
+
 
 @dataclass
 class Finding:
@@ -84,6 +108,7 @@ class RepoProfile:
     has_docker: bool
     has_web_ui: bool
     has_cli: bool
+    has_demo: bool
     uses_env: bool
     todo_count: int
     large_files: list[str]
@@ -158,12 +183,15 @@ def build_profile(root: Path) -> RepoProfile:
     ]
     todo_count = 0
     uses_env = False
+    has_demo = False
     for path in code_files + doc_files:
         text = safe_read_text(path)
         todo_count += count_todo_markers(path, text)
         lowered = text.lower()
         if any(marker in lowered for marker in ENV_MARKERS):
             uses_env = True
+        if "--demo" in lowered:
+            has_demo = True
 
     large_files = []
     for path in files:
@@ -189,10 +217,18 @@ def build_profile(root: Path) -> RepoProfile:
         has_docker="dockerfile" in names or "docker-compose.yml" in names,
         has_web_ui=any(part in rel for rel in rels for part in ("src/main", "app/", "pages/", "dashboard")),
         has_cli=any(path.name in {"cli.py", "__main__.py", "main.py", "next_move.py"} for path in files),
+        has_demo=has_demo,
         uses_env=uses_env,
         todo_count=todo_count,
         large_files=large_files[:12],
     )
+
+
+def create_demo_project(root: Path) -> None:
+    for relative_path, content in DEMO_PROJECT_FILES.items():
+        path = root / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
 
 
 def add(finding_list: list[Finding], title: str, why: str, action: str, impact: int, effort: int, category: str) -> None:
@@ -312,15 +348,16 @@ def generate_findings(profile: RepoProfile) -> list[Finding]:
         2,
         "monetization",
     )
-    add(
-        findings,
-        "Add a one-command demo",
-        "People decide quickly. A single command lowers the activation cost.",
-        "Add a command that scans the current repo and writes `ROADMAP.md`.",
-        5,
-        1,
-        "adoption",
-    )
+    if not profile.has_demo:
+        add(
+            findings,
+            "Add a one-command demo",
+            "People decide quickly. A single command lowers the activation cost.",
+            "Add a command that scans the current repo and writes `ROADMAP.md`.",
+            5,
+            1,
+            "adoption",
+        )
 
     return sorted(findings, key=lambda item: item.priority, reverse=True)
 
@@ -482,6 +519,7 @@ def render_markdown(profile: RepoProfile, findings: list[Finding]) -> str:
         f"- License: {'yes' if profile.has_license else 'no'}",
         f"- CI: {'yes' if profile.has_ci else 'no'}",
         f"- Docker: {'yes' if profile.has_docker else 'no'}",
+        f"- Demo: {'yes' if profile.has_demo else 'no'}",
         "",
         "## Recommended Next Moves",
         "",
@@ -535,17 +573,16 @@ def render_markdown(profile: RepoProfile, findings: list[Finding]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def run(
-    repo: Path,
+def run_report(
+    root: Path,
     output: Path | None,
     as_json: bool,
     issues_dir: Path | None,
     self_improve: bool,
     self_improve_output: Path | None,
+    default_output: Path | None = None,
+    print_markdown: bool = False,
 ) -> int:
-    root = repo.resolve()
-    if not root.exists() or not root.is_dir():
-        raise SystemExit(f"Repo path does not exist or is not a directory: {root}")
     profile = build_profile(root)
     findings = generate_findings(profile)
     payload = {
@@ -566,17 +603,50 @@ def run(
         return 0
 
     markdown = render_markdown(profile, findings)
-    target = output or root / "ROADMAP.md"
-    target.write_text(markdown, encoding="utf-8")
-    print(f"Wrote {target}")
+    target = output or default_output
+    if target:
+        target.write_text(markdown, encoding="utf-8")
+        print(f"Wrote {target}")
+    if print_markdown or not target:
+        print(markdown)
     if issues_dir:
         written = write_issue_files(findings, issues_dir.resolve())
         print(f"Wrote {len(written)} issue drafts to {issues_dir.resolve()}")
     return 0
 
 
+def run(
+    repo: Path,
+    output: Path | None,
+    as_json: bool,
+    issues_dir: Path | None,
+    self_improve: bool,
+    self_improve_output: Path | None,
+    demo: bool,
+) -> int:
+    if demo:
+        with tempfile.TemporaryDirectory(prefix="next-move-demo-") as tmp:
+            demo_root = Path(tmp)
+            create_demo_project(demo_root)
+            return run_report(
+                demo_root,
+                output,
+                as_json,
+                issues_dir,
+                self_improve,
+                self_improve_output,
+                print_markdown=output is None and not as_json and not self_improve,
+            )
+
+    root = repo.resolve()
+    if not root.exists() or not root.is_dir():
+        raise SystemExit(f"Repo path does not exist or is not a directory: {root}")
+    return run_report(root, output, as_json, issues_dir, self_improve, self_improve_output, default_output=root / "ROADMAP.md")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate practical next moves for a repository.")
+    parser.add_argument("--demo", action="store_true", help="Run against a built-in demo project and print the report.")
     parser.add_argument("--repo", default=".", help="Repository or project directory to scan.")
     parser.add_argument("--output", help="Markdown output path. Defaults to ROADMAP.md inside the repo.")
     parser.add_argument("--issues-dir", help="Write GitHub issue draft Markdown files to this directory.")
@@ -594,7 +664,7 @@ def main() -> int:
     output = Path(args.output).resolve() if args.output else None
     issues_dir = Path(args.issues_dir).resolve() if args.issues_dir else None
     self_improve_output = Path(args.self_improve_output).resolve() if args.self_improve_output else None
-    return run(Path(args.repo), output, args.json, issues_dir, args.self_improve, self_improve_output)
+    return run(Path(args.repo), output, args.json, issues_dir, args.self_improve, self_improve_output, args.demo)
 
 
 if __name__ == "__main__":
