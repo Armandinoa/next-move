@@ -54,6 +54,12 @@ ENV_MARKERS = (
     "dot" + "env",
     "pydantic_" + "settings",
 )
+FOCUS_CATEGORIES = {
+    "all": set(),
+    "logic": {"logic", "reliability", "risk", "data", "testing", "execution", "trust"},
+    "growth": {"growth", "adoption", "marketing", "trust", "product"},
+    "monetization": {"monetization", "growth", "product"},
+}
 
 DEMO_PROJECT_FILES = {
     "README.md": "# Demo App\n\nA tiny unfinished app used to demonstrate Next Move.\n",
@@ -111,6 +117,10 @@ class RepoProfile:
     has_cli: bool
     has_demo: bool
     has_paid_boundary: bool
+    has_backtest: bool
+    has_paper_journal: bool
+    has_trading_engine: bool
+    has_kronos: bool
     uses_env: bool
     todo_count: int
     large_files: list[str]
@@ -230,6 +240,15 @@ def build_profile(root: Path, exclude: set[str] | None = None) -> RepoProfile:
             rel in {"docs/monetization.md", "monetization.md", "pricing.md", "docs/pricing.md"}
             for rel in rels
         ),
+        has_backtest=any("backtest" in rel for rel in rels),
+        has_paper_journal=any("paper_journal" in rel or "paper_trade_journal" in rel for rel in rels),
+        has_trading_engine=any(
+            rel.endswith("trade_decision_engine.py")
+            or rel.endswith("technical_filter.py")
+            or rel.endswith("telegram_worldmonitor_bot.py")
+            for rel in rels
+        ),
+        has_kronos=any("kronos" in rel for rel in rels),
         uses_env=uses_env,
         todo_count=todo_count,
         large_files=large_files[:12],
@@ -351,6 +370,56 @@ def generate_findings(profile: RepoProfile) -> list[Finding]:
             "maintenance",
         )
 
+    if profile.has_trading_engine:
+        add(
+            findings,
+            "Add decision-engine regression cases",
+            "Trading logic can regress silently when filters, market windows, macro blocks, or Kronos alignment change.",
+            "Create fixture-based tests for approved, blocked-by-RR, blocked-by-market-window, blocked-by-macro, and Kronos-disagreement decisions.",
+            5,
+            2,
+            "logic",
+        )
+        add(
+            findings,
+            "Extract risk rules into an auditable config",
+            "Hard-coded confidence, RR, stop, and session assumptions are difficult to tune and compare across paper results.",
+            "Move confidence, minimum RR, stop lookback, ATR buffer, allowed sessions, and per-symbol overrides into a versioned risk config.",
+            5,
+            3,
+            "risk",
+        )
+    if profile.has_paper_journal:
+        add(
+            findings,
+            "Add paper-journal calibration metrics",
+            "A trading bot improves only if signals are compared against outcomes by symbol, session, confidence, RR, and blocker reason.",
+            "Build a report that groups paper outcomes by asset, direction, confidence, RR bucket, Kronos agreement, macro state, and holding window.",
+            5,
+            3,
+            "logic",
+        )
+    if profile.has_backtest:
+        add(
+            findings,
+            "Turn backtests into repeatable baselines",
+            "One-off backtests are useful, but strategy changes need comparable before/after baselines.",
+            "Save baseline parameters and expected summary ranges, then add a command that reruns the same 3m/6m checks after logic changes.",
+            4,
+            2,
+            "testing",
+        )
+    if profile.has_kronos or profile.has_trading_engine:
+        add(
+            findings,
+            "Add data freshness and source-health gates",
+            "Signals can look valid while news, price, Kronos cache, or macro data are stale or partially failed.",
+            "Expose last successful fetch times and block or downgrade signals when WorldMonitor, yfinance, Kronos cache, or macro calendar are stale.",
+            5,
+            2,
+            "data",
+        )
+
     if not profile.has_paid_boundary:
         add(
             findings,
@@ -373,6 +442,14 @@ def generate_findings(profile: RepoProfile) -> list[Finding]:
         )
 
     return sorted(findings, key=lambda item: item.priority, reverse=True)
+
+
+def apply_focus(findings: list[Finding], focus: str) -> list[Finding]:
+    allowed = FOCUS_CATEGORIES.get(focus, set())
+    if not allowed:
+        return findings
+    focused = [finding for finding in findings if finding.category in allowed]
+    return focused or findings
 
 
 def monetization_ideas(profile: RepoProfile) -> list[str]:
@@ -594,12 +671,13 @@ def run_report(
     issues_dir: Path | None,
     self_improve: bool,
     self_improve_output: Path | None,
+    focus: str,
     exclude: set[str] | None = None,
     default_output: Path | None = None,
     print_markdown: bool = False,
 ) -> int:
     profile = build_profile(root, exclude=exclude)
-    findings = generate_findings(profile)
+    findings = apply_focus(generate_findings(profile), focus)
     payload = {
         "profile": asdict(profile),
         "findings": [asdict(finding) | {"priority": finding.priority} for finding in findings],
@@ -638,6 +716,7 @@ def run(
     self_improve: bool,
     self_improve_output: Path | None,
     demo: bool,
+    focus: str,
     exclude: set[str] | None,
 ) -> int:
     if demo:
@@ -651,6 +730,7 @@ def run(
                 issues_dir,
                 self_improve,
                 self_improve_output,
+                focus,
                 exclude=None,
                 print_markdown=output is None and not as_json and not self_improve,
             )
@@ -665,6 +745,7 @@ def run(
         issues_dir,
         self_improve,
         self_improve_output,
+        focus,
         exclude=exclude,
         default_output=root / "ROADMAP.md",
     )
@@ -679,6 +760,12 @@ def parse_args() -> argparse.Namespace:
         action="append",
         default=[],
         help="Top-level folder or path part to exclude from scanning. Can be used multiple times.",
+    )
+    parser.add_argument(
+        "--focus",
+        choices=sorted(FOCUS_CATEGORIES),
+        default="all",
+        help="Filter recommendations by priority area.",
     )
     parser.add_argument("--output", help="Markdown output path. Defaults to ROADMAP.md inside the repo.")
     parser.add_argument("--issues-dir", help="Write GitHub issue draft Markdown files to this directory.")
@@ -704,6 +791,7 @@ def main() -> int:
         args.self_improve,
         self_improve_output,
         args.demo,
+        args.focus,
         set(args.exclude),
     )
 

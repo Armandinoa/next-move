@@ -76,6 +76,12 @@ Exclude vendored or generated folders:
 python next_move.py --repo path/to/project --exclude vendor --exclude examples
 ```
 
+Focus on program logic instead of growth/demo suggestions:
+
+```bash
+python next_move.py --repo path/to/project --focus logic
+```
+
 Generate a guided self-improvement plan:
 
 ```bash
